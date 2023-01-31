@@ -189,7 +189,7 @@ async fn run_server() -> io::Result<()> {
     let app = routes().layer(middlewares).into_make_service();
     let handle = ServerHandle::new();
 
-    tokio::spawn(shutdown(handle.clone()));
+    tokio::spawn(shutdown_monitor::monitor(handle.clone()));
 
     match &config.tls {
         Some(tls) => {

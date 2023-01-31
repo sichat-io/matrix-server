@@ -1,5 +1,5 @@
 pub mod error;
-pub mod shutdown;
+pub mod shutdown_monitor;
 
 use argon2::{Config, Variant};
 use cmp::Ordering;

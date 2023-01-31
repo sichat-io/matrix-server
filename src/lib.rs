@@ -20,7 +20,7 @@ pub use config::Config;
 pub use database::KeyValueDatabase;
 pub use service::{pdu::PduEvent, Services};
 pub use utils::error::{Error, Result};
-pub use utils::shutdown::shutdown;
+pub use utils::shutdown_monitor;
 
 pub static SERVICES: RwLock<Option<&'static Services>> = RwLock::new(None);
 

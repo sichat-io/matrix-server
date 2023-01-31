@@ -9,13 +9,11 @@ const GRACE_DURATION: u64 = 3; // seconds
 const CHECK_INTERVAL: u64 = 30; // seconds
 const IDLE_DURATION: Duration = Duration::from_secs(300);
 
-pub async fn shutdown(handle: Handle) {
-    let last_activity = &mut Instant::now();
-
+pub async fn monitor(handle: Handle) {
     tokio::select! {
         _ = ctrl_c() => grace_shutdown(&handle, SIGINT),
         _ = terminate() => grace_shutdown(&handle, SIGTERM),
-        _ = check_idle(&handle, last_activity) => {}
+        _ = check_idle(&handle) => {}
     }
 }
 
@@ -44,10 +42,13 @@ fn grace_shutdown(handle: &Handle, signal: &str) {
 // to be checked by the connection type of client/serveer protocol
 // we assume that a client keeps connection open when it is running
 // therefore the number of connection is a reliable metric to check activities
-async fn check_idle(handle: &Handle, last_activity: &mut Instant) {
+async fn check_idle(handle: &Handle) {
+    let mut last_activity = Instant::now();
     loop {
-        if handle.connection_count() > 0 {
-            *last_activity = Instant::now();
+        let count = handle.connection_count();
+        if count > 0 {
+            info!("Current connection count: {count}");
+            last_activity = Instant::now();
         } else {
             let idle_time = last_activity.elapsed();
             info!("Idle for {:?}", idle_time);
