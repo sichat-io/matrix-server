@@ -27,3 +27,6 @@ rustfmt.toml
 # Documentation
 doc
 *.md
+
+# scripts
+*.sh

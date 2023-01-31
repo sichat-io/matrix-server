@@ -56,3 +56,12 @@ Then, build and run the image in a fly machine:
 - test `curl -i https://sichat.fly.dev/_matrix/client/versions`
 
 To add custom domain, check [Fly Custom Domain](https://fly.io/docs/app-guides/custom-domains-with-fly/).
+
+## 4 Code Change
+
+For code change, you need to stop and delete the current image before run the machine with the new image:
+
+- stop the current machine: `flyctl machine stop <machine-id> -a sichat`
+- remove the machine: `flyctl machine remove <machine-id> -a sichat`
+
+Run the [build script](../build.sh) to test the code change.
