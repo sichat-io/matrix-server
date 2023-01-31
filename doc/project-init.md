@@ -54,3 +54,5 @@ Then, build and run the image in a fly machine:
 - publish docker image: `docker push registry.fly.io/sichat:v0.1`
 - run a machine with the data valume: `flyctl machine run registry.fly.io/sichat:v0.1 -a sichat -p 443:6167/tcp:tls:http -p 80:6167/tcp:http --name conduit-m01 --region lax --volume conduit_data:/var/lib/matrix-conduit`
 - test `curl -i https://sichat.fly.dev/_matrix/client/versions`
+
+To add custom domain, check [Fly Custom Domain](https://fly.io/docs/app-guides/custom-domains-with-fly/).

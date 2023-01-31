@@ -25,4 +25,5 @@ docker-compose*
 rustfmt.toml
 
 # Documentation
-#*.md
+doc
+*.md
