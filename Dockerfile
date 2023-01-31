@@ -25,7 +25,8 @@ ARG DEFAULT_DB_PATH=/var/lib/matrix-conduit
 ENV CONDUIT_PORT=6167 \
     CONDUIT_SERVER_NAME="sichat.io" \
     CONDUIT_DATABASE_BACKEND="sqlite" \
-    CONDUIT_ALLOW_REGISTRATION='true' \
+    CONDUIT_ALLOW_REGISTRATION="true" \
+    CONDUIT_LOG="info,state_res=info,_=off,sled=off" \
     CONDUIT_ADDRESS="0.0.0.0" \
     CONDUIT_DATABASE_PATH=${DEFAULT_DB_PATH} \
     CONDUIT_CONFIG=''

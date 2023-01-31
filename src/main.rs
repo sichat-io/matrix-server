@@ -33,7 +33,7 @@ use ruma::api::{
     },
     IncomingRequest,
 };
-use tokio::signal;
+
 use tower::ServiceBuilder;
 use tower_http::{
     cors::{self, CorsLayer},
@@ -189,7 +189,7 @@ async fn run_server() -> io::Result<()> {
     let app = routes().layer(middlewares).into_make_service();
     let handle = ServerHandle::new();
 
-    tokio::spawn(shutdown_signal(handle.clone()));
+    tokio::spawn(shutdown(handle.clone()));
 
     match &config.tls {
         Some(tls) => {
@@ -412,35 +412,6 @@ fn routes() -> Router {
             get(initial_sync),
         )
         .fallback(not_found.into_service())
-}
-
-async fn shutdown_signal(handle: ServerHandle) {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    let sig: &str;
-
-    tokio::select! {
-        _ = ctrl_c => { sig = "Ctrl+C"; },
-        _ = terminate => { sig = "SIGTERM"; },
-    }
-
-    warn!("Received {}, shutting down...", sig);
-    handle.graceful_shutdown(Some(Duration::from_secs(30)));
 }
 
 async fn not_found(uri: Uri) -> impl IntoResponse {
