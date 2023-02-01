@@ -48,6 +48,7 @@ pub use conduit::*; // Re-export everything from the library crate
 #[cfg(all(not(target_env = "msvc"), feature = "jemalloc"))]
 use tikv_jemallocator::Jemalloc;
 
+//Enable alloc GLOBAL only when the target environment is not vc++ and the feature enabled is jemalloc
 #[cfg(all(not(target_env = "msvc"), feature = "jemalloc"))]
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
@@ -56,6 +57,8 @@ static GLOBAL: Jemalloc = Jemalloc;
 async fn main() {
     // Initialize DB
     let raw_config =
+    // Read the config from the file specified by the env CONDUIT_CONFIG using Toml
+    // Exits with status 1 error if the env is not set
         Figment::new()
             .merge(
                 Toml::file(Env::var("CONDUIT_CONFIG").expect(
@@ -63,8 +66,10 @@ async fn main() {
                 ))
                 .nested(),
             )
+            // Merges the config in env with the prefix CONDUIT_
             .merge(Env::prefixed("CONDUIT_").global());
 
+    // Extract the config from raw_config to config        
     let config = match raw_config.extract::<Config>() {
         Ok(s) => s,
         Err(e) => {
@@ -73,19 +78,27 @@ async fn main() {
         }
     };
 
+    // Warn about any deprecated configuration options
     config.warn_deprecated();
 
+    // Check if the config allows for Jaeger telemetry to be set
     if config.allow_jaeger {
+        // Set the text map propagator for OpenTelemetry
         opentelemetry::global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+        // Initialize and install the Jaeger pipeline for OpenTelemetry
         let tracer = opentelemetry_jaeger::new_agent_pipeline()
             .with_auto_split_batch(true)
             .with_service_name("conduit")
             .install_batch(opentelemetry::runtime::Tokio)
             .unwrap();
+        // Create the OpenTelemetry layer with the Jaeger tracer    
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
+        // Try to create a new EnvFilter based on the config.log value
         let filter_layer = match EnvFilter::try_new(&config.log) {
+            // If the creation is successful, assign the value to filter_layer
             Ok(s) => s,
+            // If the creation fails, print an error message and set the filter to log warnings
             Err(e) => {
                 eprintln!(
                     "It looks like your log config is invalid. The following error occurred: {e}"
@@ -93,15 +106,18 @@ async fn main() {
                 EnvFilter::try_new("warn").unwrap()
             }
         };
-
+        // Create a tracing subscriber registry with the filter layer
         let subscriber = tracing_subscriber::Registry::default()
             .with(filter_layer)
             .with(telemetry);
+        // Set the registry as the global default subscriber    
         tracing::subscriber::set_global_default(subscriber).unwrap();
     } else if config.tracing_flame {
         let registry = tracing_subscriber::Registry::default();
+        // Create a FlameLayer and open a file for output
         let (flame_layer, _guard) =
             tracing_flame::FlameLayer::with_file("./tracing.folded").unwrap();
+        // Configure the FlameLayer to include empty samples    
         let flame_layer = flame_layer.with_empty_samples(false);
 
         let filter_layer = EnvFilter::new("trace,h2=off");
@@ -111,55 +127,75 @@ async fn main() {
     } else {
         let registry = tracing_subscriber::Registry::default();
         let fmt_layer = tracing_subscriber::fmt::Layer::new();
+        // Try creating an EnvFilter using the config log level
         let filter_layer = match EnvFilter::try_new(&config.log) {
             Ok(s) => s,
             Err(e) => {
+                // Print an error message if the config is invalid
                 eprintln!("It looks like your config is invalid. The following error occured while parsing it: {e}");
+                / Use a default "warn" log level filter
                 EnvFilter::try_new("warn").unwrap()
             }
         };
 
+        // Add the filter layer and fmt layer to the registry
         let subscriber = registry.with(filter_layer).with(fmt_layer);
+        // Set the registry as the global default subscriber
         tracing::subscriber::set_global_default(subscriber).unwrap();
     }
 
+    // Log a message indicating the database is being loaded
     info!("Loading database");
+    // Attempt to load or create the KeyValueDatabase with the given config
     if let Err(error) = KeyValueDatabase::load_or_create(config).await {
+        // Log an error message if the database couldn't be loaded or created
         error!(?error, "The database couldn't be loaded or created");
 
         std::process::exit(1);
     };
+    // Get a reference to the config from the services
     let config = &services().globals.config;
 
     info!("Starting server");
     run_server().await.unwrap();
 
+    // If jaeger tracing is allowed, shutdown the tracer provider
     if config.allow_jaeger {
         opentelemetry::global::shutdown_tracer_provider();
     }
 }
 
 async fn run_server() -> io::Result<()> {
+    // Get the configuration
     let config = &services().globals.config;
+    // Get the address by combining the IP address and port from the configuration
     let addr = SocketAddr::from((config.address, config.port));
 
     let x_requested_with = HeaderName::from_static("x-requested-with");
 
+    // Define the middlewares for the server
     let middlewares = ServiceBuilder::new()
+        // Add the `Authorization` header to the list of sensitive headers
         .sensitive_headers([header::AUTHORIZATION])
+        // Add a tracing layer to log the incoming HTTP requests
         .layer(
             TraceLayer::new_for_http().make_span_with(|request: &http::Request<_>| {
+                // Get the path from the request, either from the matched path or from the URI
                 let path = if let Some(path) = request.extensions().get::<MatchedPath>() {
                     path.as_str()
                 } else {
                     request.uri().path()
                 };
 
+                // Log the path as an `http_request` span with tracing
                 tracing::info_span!("http_request", %path)
             }),
         )
+        // Add compression to the middleware stack
         .compression()
+        // Add a layer to handle requests with an unrecognized method
         .layer(axum::middleware::from_fn(unrecognized_method))
+        // Add a layer to handle Cross-Origin Resource Sharing (CORS)
         .layer(
             CorsLayer::new()
                 .allow_origin(cors::Any)
@@ -177,8 +213,10 @@ async fn run_server() -> io::Result<()> {
                     header::ACCEPT,
                     header::AUTHORIZATION,
                 ])
+                // Set the maximum age for CORS preflight responses to 86400 seconds
                 .max_age(Duration::from_secs(86400)),
         )
+        // Limit the maximum size of incoming request bodies
         .layer(DefaultBodyLimit::max(
             config
                 .max_request_size
@@ -186,22 +224,31 @@ async fn run_server() -> io::Result<()> {
                 .expect("failed to convert max request size"),
         ));
 
+    // Define the service using the `routes` function and the defined middlewares    
     let app = routes().layer(middlewares).into_make_service();
     let handle = ServerHandle::new();
 
     tokio::spawn(shutdown_monitor::monitor(handle.clone()));
 
+    // Check if there is a TLS configuration
     match &config.tls {
+        // If there is a TLS configuration
         Some(tls) => {
+            // Load the TLS configuration from the certificate and key files
             let conf = RustlsConfig::from_pem_file(&tls.certs, &tls.key).await?;
+            // Bind the server with the TLS configuration and handle it with `handle`
             let server = bind_rustls(addr, conf).handle(handle).serve(app);
 
+            // Notify systemd that the server is ready
             #[cfg(feature = "systemd")]
             let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Ready]);
 
+            // Serve the app
             server.await?
         }
+        // If there is no TLS configuration
         None => {
+            // Bind the server without the TLS configuration and handle it with `handle`
             let server = bind(addr).handle(handle).serve(app);
 
             #[cfg(feature = "systemd")]
@@ -228,8 +275,11 @@ async fn unrecognized_method<B>(
     let method = req.method().clone();
     let uri = req.uri().clone();
     let inner = next.run(req).await;
+    // check if the status is METHOD_NOT_ALLOWED
     if inner.status() == axum::http::StatusCode::METHOD_NOT_ALLOWED {
+        // log a warning with the method and uri
         warn!("Method not allowed: {method} {uri}");
+        // return an error response with Unrecognized error message
         return Ok(RumaResponse(UiaaResponse::MatrixError(RumaError {
             body: ErrorBody::Standard {
                 kind: ErrorKind::Unrecognized,
