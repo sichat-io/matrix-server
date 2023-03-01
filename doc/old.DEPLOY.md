@@ -1,5 +1,7 @@
 # Deploying Conduit
 
+This is the original deployment doc.
+
 > ## Getting help
 >
 > If you run into any problems while setting up Conduit, write an email to `conduit@koesters.xyz`, ask us
@@ -67,6 +69,7 @@ cd conduit
 export RUSTFLAGS='-C link-arg=-lgcc -Clink-arg=-latomic -Clink-arg=-static-libgcc'
 cross build --release --no-default-features --features conduit_bin,backend_rocksdb,jemalloc --target=arm-unknown-linux-gnueabihf
 ```
+
 </details>
 
 ## Adding a Conduit user

@@ -10,8 +10,6 @@ docker build -t registry.fly.io/sichat:v0.1 .
 docker push registry.fly.io/sichat:v0.1
 
 # get the current machine id
-
-
 if MID=$(flyctl machine list -a sichat | grep -o -E "[A-Fa-f0-9]{14}"); then
     # stop the machine and wait till it is stopped
     flyctl machine stop "$MID" -a sichat

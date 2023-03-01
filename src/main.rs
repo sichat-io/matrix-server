@@ -142,7 +142,6 @@ async fn main() {
 async fn run_server() -> io::Result<()> {
     let config = &services().globals.config;
     let addr = SocketAddr::from((config.address, config.port));
-
     let x_requested_with = HeaderName::from_static("x-requested-with");
 
     let middlewares = ServiceBuilder::new()

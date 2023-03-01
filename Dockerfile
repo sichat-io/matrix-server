@@ -1,11 +1,21 @@
 # syntax=docker/dockerfile:1
 
-FROM docker.io/rust:1.64-bullseye AS builder
+# Use https://github.com/LukeMathWalker/cargo-chef to cache dependencies
+FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 WORKDIR /app
 
 # Install required packages to build Conduit and it's dependencies
 RUN apt-get update && \
     apt-get -y --no-install-recommends install libclang-dev=1:11.0-51+nmu5
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+# Build dependencies - this is the caching Docker layer!
+RUN cargo chef cook --release --recipe-path recipe.json
 
 # Copy over actual Conduit sources
 COPY Cargo.toml Cargo.lock ./
